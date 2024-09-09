@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import anthropic
 import os
 import json
+import requests
+from bs4 import BeautifulSoup
 import openai
 from dotenv import load_dotenv
 
@@ -18,6 +20,47 @@ client = anthropic.Anthropic()
 
 class URLRequest(BaseModel):
     url: str
+
+def fetch_sitemap_urls_recursively(sitemap_url):
+    """
+    Recursively fetch URLs from a sitemap using requests and BeautifulSoup.
+
+    Args:
+    - sitemap_url (str): The URL of the sitemap to extract URLs from.
+
+    Returns:
+    - List of extracted URLs.
+    """
+    try:
+        print(f"Fetching URLs from sitemap: {sitemap_url}")
+        response = requests.get(sitemap_url)
+        print("response: ", response)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content, "lxml")
+
+        # Initialize list to store all URLs
+        all_urls = []
+
+        # Find all <sitemap> tags for nested sitemaps
+        sitemaps = soup.find_all("sitemap")
+        for sitemap in sitemaps:
+            loc = sitemap.find("loc").text
+            print(f"Found nested sitemap: {loc}")
+            all_urls.extend(fetch_sitemap_urls_recursively(loc))
+
+        # Find all <url> tags for actual URLs
+        urls = soup.find_all("url")
+        for url in urls:
+            loc = url.find("loc").text
+            print(f"Found URL: {loc}")
+            all_urls.append(loc)
+
+        return all_urls
+    except Exception as e:
+        print(f"Error fetching URLs from sitemap: {e}")
+        return []  # Return an empty list on any exception
+
 
 @app.post("/extract-urls/")
 async def extract_urls(request: URLRequest):
@@ -64,35 +107,29 @@ async def extract_urls(request: URLRequest):
         else:
             print("Invalid response format from the API.")
 
-        # Generate a message to send to the Anthropic API
+        # Fetch URLs from the sitemap recursively
         print("Extracting URLs from the sitemap...", sitemap_url)
-        message = client.messages.create(
-            model="claude-3-opus-20240229",
-            max_tokens=1024,
-            temperature=0,
-            system="Given the  sitemap url, extract all urls with the page title and summary. Return as JSON with no additional comments.",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"sitemap: {sitemap_url}"
-                        }
-                    ]
-                }
-            ]
-        )
+        urls = fetch_sitemap_urls_recursively(sitemap_url)
 
-        # Extract the content from the response
-        content = message.content
-        print("sitemap content: ", content)
+        # Experimental extraction using gpt-3.5-turbo
+        
+        url_results = []
+        for url in urls:
+          completion = openai.chat.completions.create(
+              model="gpt-3.5-turbo",
+              response_format={"type": "json_object"},
+              messages=[
+                  {"role": "system", "content": "Get page title the given URL. Return as JSON"},
+                  {"role": "user", "content": f"url: {url}"}
+              ]
+          )
+      
+          results = completion.choices[0].message.content
+          url_results.append(results)
 
+        return url_results
 
-        if content:
-            return {"urls": content}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to extract URLs from the sitemap.")
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
