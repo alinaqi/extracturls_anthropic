@@ -6,6 +6,8 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import openai
+import gzip
+import io
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -21,6 +23,12 @@ client = anthropic.Anthropic()
 class URLRequest(BaseModel):
     url: str
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Connection": "keep-alive",
+}
+
 def fetch_sitemap_urls_recursively(sitemap_url):
     """
     Recursively fetch URLs from a sitemap using requests and BeautifulSoup.
@@ -33,8 +41,8 @@ def fetch_sitemap_urls_recursively(sitemap_url):
     """
     try:
         print(f"Fetching URLs from sitemap: {sitemap_url}")
-        response = requests.get(sitemap_url)
-        print("response: ", response)
+        
+        response = requests.get(sitemap_url, headers=HEADERS)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, "lxml")
@@ -111,7 +119,9 @@ async def extract_urls(request: URLRequest):
         print("Extracting URLs from the sitemap...", sitemap_url)
         urls = fetch_sitemap_urls_recursively(sitemap_url)
 
-        # Experimental extraction using gpt-3.5-turbo
+        return urls
+        # Experimental extraction using gpt-3.5-turbo. 
+        # This takes too long and should be done as a background task. 
         
         url_results = []
         for url in urls:
