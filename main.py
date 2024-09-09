@@ -119,7 +119,7 @@ async def extract_urls(request: URLRequest):
               model="gpt-3.5-turbo",
               response_format={"type": "json_object"},
               messages=[
-                  {"role": "system", "content": "Get page title the given URL. Return as JSON"},
+                  {"role": "system", "content": "Get page title the given URL. Return as JSON with format {\"url\": \"https://www.example.com\", \"title\": \"Page Title\"}"},
                   {"role": "user", "content": f"url: {url}"}
               ]
           )
